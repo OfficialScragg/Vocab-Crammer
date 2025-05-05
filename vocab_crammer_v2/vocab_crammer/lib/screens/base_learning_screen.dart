@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/vocab_word.dart';
 import '../services/vocab_service.dart';
 import '../services/settings_service.dart';
+import '../main.dart';
 
 abstract class BaseLearningScreen extends StatefulWidget {
   final VocabService vocabService;
@@ -16,7 +17,7 @@ abstract class BaseLearningScreen extends StatefulWidget {
   }) : super(key: key);
 }
 
-abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends State<T> {
+abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends State<T> with TickerProviderStateMixin {
   List<VocabWord> _currentWords = [];
   List<VocabWord> _reviewWords = [];
   bool _isCompleted = false;
@@ -25,6 +26,7 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
   int _currentReviewIndex = 0;
   bool _showTranslation = false;
   final Set<String> _correctlyAnsweredWords = {};
+  final Set<String> _revealedWords = {};
   bool _isLearning = true;
   int _currentIndex = 0;
   String? _feedback;
@@ -34,11 +36,26 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
   int _currentTestIndex = 0;
   bool _isTestMode = false;
   final Set<String> _incorrectWords = {};
+  late AnimationController _flipController;
+  late Animation<double> _flipAnimation;
 
   @override
   void initState() {
     super.initState();
+    _flipController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _flipAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _flipController, curve: Curves.easeInOut),
+    );
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _flipController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
@@ -125,6 +142,16 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
         _incorrectWords.clear();
       });
     }
+  }
+
+  void _toggleWordReveal(String word) {
+    setState(() {
+      if (_revealedWords.contains(word)) {
+        _revealedWords.remove(word);
+      } else {
+        _revealedWords.add(word);
+      }
+    });
   }
 
   @override
@@ -231,35 +258,62 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _showTranslation = !_showTranslation;
-                  });
-                },
-                child: Card(
-                  elevation: 4,
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      children: [
-                        Text(
-                          currentWord.word,
-                          style: Theme.of(context).textTheme.headlineLarge,
-                          textAlign: TextAlign.center,
-                        ),
-                        if (_showTranslation) ...[
-                          const SizedBox(height: 16),
-                          const Divider(),
-                          const SizedBox(height: 16),
-                          Text(
-                            currentWord.translation,
-                            style: Theme.of(context).textTheme.titleLarge,
-                            textAlign: TextAlign.center,
+              SizedBox(
+                width: 300,
+                height: 200,
+                child: GestureDetector(
+                  onTap: () {
+                    if (_showTranslation) {
+                      _flipController.reverse();
+                    } else {
+                      _flipController.forward();
+                    }
+                    setState(() {
+                      _showTranslation = !_showTranslation;
+                    });
+                  },
+                  child: AnimatedBuilder(
+                    animation: _flipAnimation,
+                    builder: (context, child) {
+                      final transform = Matrix4.identity()
+                        ..setEntry(3, 2, 0.001)
+                        ..rotateY(3.14159 * _flipAnimation.value);
+                      
+                      // Show no text during any transition
+                      if (_flipAnimation.value > 0.45 && _flipAnimation.value < 0.55 || 
+                          !_showTranslation && _flipAnimation.value > 0) {
+                        return Transform(
+                          transform: transform,
+                          alignment: Alignment.center,
+                          child: Card(
+                            elevation: 4,
+                            child: Container(
+                              padding: const EdgeInsets.all(24.0),
+                              alignment: Alignment.center,
+                            ),
                           ),
-                        ],
-                      ],
-                    ),
+                        );
+                      }
+                      
+                      return Transform(
+                        transform: transform,
+                        alignment: Alignment.center,
+                        child: Card(
+                          elevation: 4,
+                          child: Container(
+                            padding: const EdgeInsets.all(24.0),
+                            alignment: Alignment.center,
+                            child: _showTranslation && _flipAnimation.value > 0.5
+                                ? Transform(
+                                    transform: Matrix4.identity()..rotateY(3.14159),
+                                    alignment: Alignment.center,
+                                    child: _buildTranslationText(currentWord.translation),
+                                  )
+                                : _buildWordText(currentWord.word),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -276,6 +330,7 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
                     onPressed: () {
                       setState(() {
                         _showTranslation = false;
+                        _flipController.reverse();
                         _currentTestIndex = 0;
                         _incorrectWords.clear();
                       });
@@ -288,14 +343,20 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
                     onPressed: () {
                       setState(() {
                         _showTranslation = false;
-                        if (_currentTestIndex < _testWords.length - 1) {
-                          _currentTestIndex++;
-                        } else {
-                          _isTestMode = false;
-                          _isCompleted = true;
-                          _testWords.clear();
-                          _currentTestIndex = 0;
-                          _incorrectWords.clear();
+                      });
+                      _flipController.reverse().then((_) {
+                        if (mounted) {
+                          setState(() {
+                            if (_currentTestIndex < _testWords.length - 1) {
+                              _currentTestIndex++;
+                            } else {
+                              _isTestMode = false;
+                              _isCompleted = true;
+                              _testWords.clear();
+                              _currentTestIndex = 0;
+                              _incorrectWords.clear();
+                            }
+                          });
                         }
                       });
                     },
@@ -360,15 +421,6 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Tap each word to reveal its meaning',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: Colors.grey[600],
-              ),
-            ),
-          ),
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.all(16.0),
@@ -376,62 +428,78 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
               itemBuilder: (context, index) {
                 final word = _currentWords[index];
                 final isLearned = _correctlyAnsweredWords.contains(word.word);
+                final isRevealed = _revealedWords.contains(word.word);
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16.0),
                   elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                if (isLearned) {
-                                  _correctlyAnsweredWords.remove(word.word);
-                                } else {
-                                  _correctlyAnsweredWords.add(word.word);
-                                }
-                              });
-                            },
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  word.word,
-                                  style: Theme.of(context).textTheme.titleLarge,
+                  child: InkWell(
+                    onTap: () => _toggleWordReveal(word.word),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _buildWordText(word.word),
+                                    if (isRevealed) ...[
+                                      const SizedBox(height: 8),
+                                      _buildTranslationText(word.translation),
+                                    ],
+                                  ],
                                 ),
-                                if (isLearned) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    word.translation,
-                                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                      color: Colors.grey[600],
+                              ),
+                              if (!isLearned)
+                                IconButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _correctlyAnsweredWords.add(word.word);
+                                    });
+                                  },
+                                  icon: Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: Colors.grey.shade400,
+                                        width: 2,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      Icons.check,
+                                      size: 20,
+                                      color: Colors.grey.shade400,
                                     ),
                                   ),
-                                ],
-                              ],
-                            ),
+                                  tooltip: 'Mark as Learned',
+                                )
+                              else
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.green.shade100,
+                                    border: Border.all(
+                                      color: Colors.green.shade400,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Icon(
+                                    Icons.check,
+                                    size: 20,
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 16),
-                        IconButton(
-                          onPressed: () {
-                            setState(() {
-                              if (isLearned) {
-                                _correctlyAnsweredWords.remove(word.word);
-                              } else {
-                                _correctlyAnsweredWords.add(word.word);
-                              }
-                            });
-                          },
-                          icon: Icon(
-                            isLearned ? Icons.check_circle : Icons.check_circle_outline,
-                            color: isLearned ? Colors.green : Colors.grey,
-                            size: 32,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -441,22 +509,9 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
           if (_correctlyAnsweredWords.length == _currentWords.length)
             Padding(
               padding: const EdgeInsets.all(16.0),
-              child: ElevatedButton.icon(
+              child: ElevatedButton(
                 onPressed: _markWordsAsLearned,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.primary,
-                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 2,
-                ),
-                icon: const Icon(Icons.school_rounded),
-                label: const Text(
-                  'Start Test',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                child: const Text('Continue to Test'),
               ),
             ),
         ],
@@ -474,6 +529,52 @@ abstract class BaseLearningScreenState<T extends BaseLearningScreen> extends Sta
       return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} and ${difference.inMinutes % 60} minute${difference.inMinutes % 60 != 1 ? 's' : ''}';
     } else {
       return '${difference.inMinutes} minute${difference.inMinutes != 1 ? 's' : ''}';
+    }
+  }
+
+  Widget _buildWordText(String word) {
+    if (widget.language == 'Hebrew') {
+      return HebrewText(
+        text: word,
+        fontSize: 32,
+        color: Colors.black87,
+      );
+    } else if (widget.language == 'Greek') {
+      return GreekText(
+        text: word,
+        fontSize: 32,
+        color: Colors.black87,
+      );
+    } else {
+      return Text(
+        word,
+        style: Theme.of(context).textTheme.headlineMedium,
+      );
+    }
+  }
+
+  Widget _buildTranslationText(String translation) {
+    if (widget.language == 'Hebrew') {
+      return Text(
+        translation,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: Colors.black54,
+        ),
+      );
+    } else if (widget.language == 'Greek') {
+      return Text(
+        translation,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: Colors.black54,
+        ),
+      );
+    } else {
+      return Text(
+        translation,
+        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+          color: Colors.black54,
+        ),
+      );
     }
   }
 } 

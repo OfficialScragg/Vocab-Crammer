@@ -359,30 +359,33 @@ class DatabaseService {
     }).toList();
   }
 
-  Future<List<VocabWord>> getRecentlyLearnedWords(String language, {int limit = 20}) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'vocab_words',
-      where: 'language = ? AND is_learned = 1',
-      whereArgs: [language],
-      orderBy: 'last_reviewed DESC',
-      limit: limit,
-    );
-
-    return List.generate(maps.length, (i) {
-      return VocabWord(
-        word: maps[i]['word'],
-        translation: maps[i]['translation'],
-        language: maps[i]['language'],
-        isLearned: maps[i]['is_learned'] == 1,
-        lastReviewed: maps[i]['last_reviewed'] != null 
-            ? DateTime.parse(maps[i]['last_reviewed'])
-            : null,
-        nextReview: maps[i]['next_review'] != null 
-            ? DateTime.parse(maps[i]['next_review'])
-            : null,
-        reviewCount: maps[i]['review_count'],
+  Future<List<VocabWord>> getRecentlyLearnedWords(String language) async {
+    try {
+      final db = await database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'vocab_words',
+        where: 'language = ? AND is_learned = 1',
+        whereArgs: [language],
+        orderBy: 'last_reviewed DESC',
       );
-    });
+
+      return List.generate(maps.length, (i) {
+        return VocabWord(
+          word: maps[i]['word'] as String,
+          translation: maps[i]['translation'] as String,
+          language: maps[i]['language'] as String,
+          isLearned: maps[i]['is_learned'] == 1,
+          nextReview: maps[i]['next_review'] != null
+              ? DateTime.parse(maps[i]['next_review'] as String)
+              : null,
+          lastReviewed: maps[i]['last_reviewed'] != null
+              ? DateTime.parse(maps[i]['last_reviewed'] as String)
+              : null,
+        );
+      });
+    } catch (e) {
+      print('Error getting recently learned words: $e');
+      rethrow;
+    }
   }
 } 

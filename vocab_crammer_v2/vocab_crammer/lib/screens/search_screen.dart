@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/vocab_word.dart';
 import '../services/vocab_service.dart';
+import '../main.dart';
 
 class SearchScreen extends StatefulWidget {
   final VocabService vocabService;
@@ -16,7 +17,7 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _searchController = TextEditingController();
-  String _selectedLanguage = 'Hebrew';
+  String _selectedLanguage = 'ALL';
   List<VocabWord> _searchResults = [];
   bool _isLoading = false;
 
@@ -37,7 +38,17 @@ class _SearchScreenState extends State<SearchScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final results = await widget.vocabService.searchWords(query, _selectedLanguage);
+      List<VocabWord> results = [];
+      if (_selectedLanguage == 'ALL') {
+        // Search in both languages
+        final hebrewResults = await widget.vocabService.searchWords(query, 'Hebrew');
+        final greekResults = await widget.vocabService.searchWords(query, 'Greek');
+        results = [...hebrewResults, ...greekResults];
+      } else {
+        // Search in selected language
+        results = await widget.vocabService.searchWords(query, _selectedLanguage);
+      }
+      
       setState(() {
         _searchResults = results;
         _isLoading = false;
@@ -79,6 +90,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   value: _selectedLanguage,
                   items: const [
                     DropdownMenuItem(
+                      value: 'ALL',
+                      child: Text('ALL'),
+                    ),
+                    DropdownMenuItem(
                       value: 'Hebrew',
                       child: Text('Hebrew'),
                     ),
@@ -107,9 +122,32 @@ class _SearchScreenState extends State<SearchScreen> {
                 itemCount: _searchResults.length,
                 itemBuilder: (context, index) {
                   final word = _searchResults[index];
-                  return ListTile(
-                    title: Text(word.word),
-                    subtitle: Text(word.translation),
+                  return Card(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: ListTile(
+                      title: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          word.language == 'Hebrew'
+                            ? HebrewText(
+                                text: word.word,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w300,
+                              )
+                            : Text(
+                                word.word,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                          const SizedBox(height: 4),
+                          Text(
+                            word.translation,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 },
               ),

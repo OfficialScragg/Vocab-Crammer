@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/vocab_word.dart';
 import '../services/vocab_service.dart';
+import '../main.dart';
 
 class ReviewScreen extends StatefulWidget {
   final VocabService vocabService;
@@ -16,12 +17,12 @@ class ReviewScreen extends StatefulWidget {
 
 class _ReviewScreenState extends State<ReviewScreen> {
   List<VocabWord> _reviewWords = [];
+  List<VocabWord> _filteredWords = [];
   bool _isLoading = true;
   String? _error;
-  int _currentIndex = 0;
-  bool _showTranslation = false;
-  final TextEditingController _answerController = TextEditingController();
-  String? _feedback;
+  final Set<String> _revealedWords = {};
+  final Map<String, bool> _wordAnswers = {};
+  String _selectedLanguage = 'ALL';
 
   @override
   void initState() {
@@ -31,7 +32,6 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   @override
   void dispose() {
-    _answerController.dispose();
     super.dispose();
   }
 
@@ -42,16 +42,17 @@ class _ReviewScreenState extends State<ReviewScreen> {
         _error = null;
       });
 
-      final hebrewWords = await widget.vocabService.getWordsForReview('Hebrew');
-      final greekWords = await widget.vocabService.getWordsForReview('Greek');
+      // Get all learned words for both languages
+      final hebrewWords = await widget.vocabService.getRecentlyLearnedWords('Hebrew');
+      final greekWords = await widget.vocabService.getRecentlyLearnedWords('Greek');
       
       if (mounted) {
         setState(() {
           _reviewWords = [...hebrewWords, ...greekWords];
+          _filterWords();
           _isLoading = false;
-          _currentIndex = 0;
-          _showTranslation = false;
-          _feedback = null;
+          _revealedWords.clear();
+          _wordAnswers.clear();
         });
       }
     } catch (e) {
@@ -64,49 +65,34 @@ class _ReviewScreenState extends State<ReviewScreen> {
     }
   }
 
-  void _checkAnswer() {
-    if (_currentIndex >= _reviewWords.length) return;
-
-    final word = _reviewWords[_currentIndex];
-    final answer = _answerController.text.trim();
-    final isCorrect = answer.toLowerCase() == word.translation.toLowerCase();
-
-    setState(() {
-      _feedback = isCorrect ? 'Correct!' : 'Incorrect. The answer is: ${word.translation}';
-      _showTranslation = true;
-    });
-  }
-
-  void _nextWord() {
-    if (_currentIndex >= _reviewWords.length - 1) {
-      // All words reviewed
-      setState(() {
-        _currentIndex = 0;
-        _showTranslation = false;
-        _feedback = null;
-        _answerController.clear();
-      });
-      _loadReviewWords(); // Reload for new words
+  void _filterWords() {
+    if (_selectedLanguage == 'ALL') {
+      _filteredWords = _reviewWords;
     } else {
-      setState(() {
-        _currentIndex++;
-        _showTranslation = false;
-        _feedback = null;
-        _answerController.clear();
-      });
+      _filteredWords = _reviewWords.where((word) => word.language == _selectedLanguage).toList();
     }
   }
 
-  void _updateReviewSchedule(bool isCorrect) {
-    if (_currentIndex >= _reviewWords.length) return;
+  void _toggleWordReveal(String word) {
+    setState(() {
+      if (_revealedWords.contains(word)) {
+        _revealedWords.remove(word);
+      } else {
+        _revealedWords.add(word);
+      }
+    });
+  }
 
-    final word = _reviewWords[_currentIndex];
+  void _updateWordReview(String word, String language, bool isCorrect) {
     final now = DateTime.now();
     final nextReview = isCorrect
         ? now.add(const Duration(days: 1))
         : now.add(const Duration(hours: 1));
 
-    widget.vocabService.updateWordReview(word.word, word.language, nextReview);
+    widget.vocabService.updateWordReview(word, language, nextReview);
+    setState(() {
+      _wordAnswers[word] = isCorrect;
+    });
   }
 
   @override
@@ -157,19 +143,21 @@ class _ReviewScreenState extends State<ReviewScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Icon(
-                Icons.check_circle_outline,
+                Icons.school_outlined,
                 size: 48,
-                color: Colors.green,
+                color: Colors.blue,
               ),
               const SizedBox(height: 16),
               Text(
-                'No words due for review!',
+                'No words learned yet!',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loadReviewWords,
-                child: const Text('Check Again'),
+              const SizedBox(height: 8),
+              Text(
+                'Complete some learning sessions first',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Colors.grey[600],
+                ),
               ),
             ],
           ),
@@ -177,112 +165,138 @@ class _ReviewScreenState extends State<ReviewScreen> {
       );
     }
 
-    final currentWord = _reviewWords[_currentIndex];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Review'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: DropdownButton<String>(
+              value: _selectedLanguage,
+              items: const [
+                DropdownMenuItem(
+                  value: 'ALL',
+                  child: Text('ALL'),
+                ),
+                DropdownMenuItem(
+                  value: 'Hebrew',
+                  child: Text('Hebrew'),
+                ),
+                DropdownMenuItem(
+                  value: 'Greek',
+                  child: Text('Greek'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() {
+                    _selectedLanguage = value;
+                    _filterWords();
+                  });
+                }
+              },
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadReviewWords,
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Word ${_currentIndex + 1} of ${_reviewWords.length}',
-              style: Theme.of(context).textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  children: [
-                    Text(
-                      currentWord.word,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '(${currentWord.language})',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.grey[600],
+      body: Column(
+        children: [
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16.0),
+              itemCount: _filteredWords.length,
+              itemBuilder: (context, index) {
+                final word = _filteredWords[index];
+                final isRevealed = _revealedWords.contains(word.word);
+                final isCorrect = _wordAnswers[word.word];
+                
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12.0),
+                  elevation: 2,
+                  child: InkWell(
+                    onTap: () => _toggleWordReveal(word.word),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    word.language == 'Hebrew'
+                                      ? HebrewText(
+                                          text: word.word,
+                                          fontSize: 32,
+                                          color: Colors.black87,
+                                        )
+                                      : word.language == 'Greek'
+                                        ? GreekText(
+                                            text: word.word,
+                                            fontSize: 32,
+                                            color: Colors.black87,
+                                          )
+                                        : Text(
+                                            word.word,
+                                            style: Theme.of(context).textTheme.titleLarge,
+                                          ),
+                                    if (isRevealed) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        word.translation,
+                                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              if (isRevealed)
+                                if (isCorrect != null)
+                                  Icon(
+                                    isCorrect ? Icons.check_circle : Icons.cancel,
+                                    color: isCorrect ? Colors.green : Colors.red,
+                                    size: 20,
+                                  )
+                                else
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        onPressed: () => _updateWordReview(word.word, word.language, false),
+                                        icon: const Icon(Icons.close, size: 20),
+                                        color: Colors.red,
+                                        padding: const EdgeInsets.all(8),
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      IconButton(
+                                        onPressed: () => _updateWordReview(word.word, word.language, true),
+                                        icon: const Icon(Icons.check, size: 20),
+                                        color: Colors.green,
+                                        padding: const EdgeInsets.all(8),
+                                        constraints: const BoxConstraints(),
+                                      ),
+                                    ],
+                                  ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    if (_showTranslation) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        currentWord.translation,
-                        style: Theme.of(context).textTheme.titleLarge,
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 24),
-            if (!_showTranslation) ...[
-              TextField(
-                controller: _answerController,
-                decoration: const InputDecoration(
-                  labelText: 'Enter translation',
-                  border: OutlineInputBorder(),
-                ),
-                onSubmitted: (_) => _checkAnswer(),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _checkAnswer,
-                child: const Text('Check Answer'),
-              ),
-            ],
-            if (_feedback != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _feedback!,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: _feedback!.startsWith('Correct') ? Colors.green : Colors.red,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(
-                    onPressed: () {
-                      _updateReviewSchedule(false);
-                      _nextWord();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                    ),
-                    child: const Text('Need More Practice'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      _updateReviewSchedule(true);
-                      _nextWord();
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                    ),
-                    child: const Text('Got It!'),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

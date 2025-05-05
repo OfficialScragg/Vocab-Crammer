@@ -244,4 +244,14 @@ class VocabService {
   Future<List<Map<String, dynamic>>> getMostChallengingWords(String language) async {
     return await _db.getMostChallengingWords(language);
   }
+
+  Future<List<VocabWord>> getRecentlyLearnedWords(String language) async {
+    try {
+      final words = await _db.getRecentlyLearnedWords(language);
+      return words;
+    } catch (e) {
+      print('Error getting recently learned words: $e');
+      rethrow;
+    }
+  }
 } 

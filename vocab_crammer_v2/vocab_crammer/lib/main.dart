@@ -9,6 +9,52 @@ import 'screens/stats_screen.dart';
 import 'services/vocab_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
+import 'package:flutter/rendering.dart';
+
+// Helper function to get text style with appropriate font
+TextStyle getTextStyle(BuildContext context, String language, TextStyle? baseStyle) {
+  final style = baseStyle?.copyWith(
+    fontFamily: language == 'Hebrew' ? 'Frank Ruhl Libre Medium' : 
+               language == 'Greek' ? 'SBL Greek' : null,
+  ) ?? TextStyle(
+    fontFamily: language == 'Hebrew' ? 'Frank Ruhl Libre Medium' : 
+               language == 'Greek' ? 'SBL Greek' : null,
+  );
+  print('Creating text style for language: $language, fontFamily: ${style.fontFamily}');
+  return style;
+}
+
+// Helper function to get text style with appropriate font
+TextStyle getHebrewTextStyle({
+  double fontSize = 24,
+  FontWeight fontWeight = FontWeight.w500,
+  double height = 1.2,
+  Color? color,
+}) {
+  return TextStyle(
+    fontFamily: 'Frank Ruhl Libre Medium',
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    height: height,
+    color: color ?? Colors.black87,
+  );
+}
+
+// Helper function to get text style with appropriate font
+TextStyle getGreekTextStyle({
+  double fontSize = 24,
+  FontWeight fontWeight = FontWeight.normal,
+  double height = 1.2,
+  Color? color,
+}) {
+  return TextStyle(
+    fontFamily: 'SBL Greek',
+    fontSize: fontSize,
+    fontWeight: fontWeight,
+    height: height,
+    color: color ?? Colors.black87,
+  );
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,6 +99,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
+        fontFamily: 'Roboto', // Set default font for non-Hebrew text
       ),
       home: MainScreen(
         settingsService: settingsService,
@@ -117,6 +164,9 @@ class _MainScreenState extends State<MainScreen> {
         settingsService: widget.settingsService,
       ),
       ReviewScreen(
+        vocabService: widget.vocabService,
+      ),
+      SearchScreen(
         vocabService: widget.vocabService,
       ),
       StatsScreen(
@@ -208,6 +258,10 @@ class _MainScreenState extends State<MainScreen> {
             label: 'Review',
           ),
           NavigationDestination(
+            icon: Icon(Icons.search),
+            label: 'Search',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.bar_chart),
             label: 'Stats',
           ),
@@ -217,6 +271,72 @@ class _MainScreenState extends State<MainScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class HebrewText extends StatelessWidget {
+  final String text;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final TextAlign? textAlign;
+  final Color? color;
+
+  const HebrewText({
+    Key? key,
+    required this.text,
+    this.fontSize = 24,
+    this.fontWeight = FontWeight.w300,
+    this.textAlign,
+    this.color,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    print('Creating HebrewText widget with text: $text');
+    return Text(
+      text,
+      style: TextStyle(
+        fontFamily: 'Frank Ruhl Libre Medium',
+        fontSize: fontSize,
+        fontWeight: FontWeight.w500,
+        height: 1.2,
+        color: color ?? Colors.black87,
+      ),
+      textAlign: textAlign,
+    );
+  }
+}
+
+class GreekText extends StatelessWidget {
+  final String text;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final TextAlign? textAlign;
+  final Color? color;
+
+  const GreekText({
+    Key? key,
+    required this.text,
+    this.fontSize = 24,
+    this.fontWeight = FontWeight.normal,
+    this.textAlign,
+    this.color,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    print('Creating GreekText widget with text: $text');
+    return Text(
+      text,
+      style: TextStyle(
+        fontFamily: 'SBL Greek',
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        height: 1.2,
+        color: color ?? Colors.black87,
+      ),
+      textAlign: textAlign,
     );
   }
 }
