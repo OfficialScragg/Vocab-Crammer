@@ -8,31 +8,41 @@ import 'screens/review_screen.dart';
 import 'services/vocab_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:io' show Platform;
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize services
-  final prefs = await SharedPreferences.getInstance();
-  final settingsService = SettingsService(prefs);
-  final vocabService = VocabService();
-  final notificationService = NotificationService();
-  
-  // Load vocabulary data
-  await vocabService.loadVocabData();
-  
-  // Initialize notifications
-  await notificationService.initialize();
-  await notificationService.scheduleHourlyNotification(
-    startHour: settingsService.startHour,
-    endHour: settingsService.endHour,
-    minute: settingsService.minute,
-  );
-  
-  runApp(MyApp(
-    settingsService: settingsService,
-    vocabService: vocabService,
-  ));
+  try {
+    // Ensure Flutter bindings are initialized first
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // Initialize SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    debugPrint('SharedPreferences initialized successfully');
+    
+    // Initialize services
+    final settingsService = SettingsService(prefs);
+    final vocabService = VocabService();
+    
+    // Load vocabulary data
+    await vocabService.loadVocabData();
+    debugPrint('Vocabulary data loaded successfully');
+    
+    runApp(MyApp(
+      settingsService: settingsService,
+      vocabService: vocabService,
+    ));
+  } catch (e) {
+    debugPrint('Error during app initialization: $e');
+    // Show error UI or handle the error appropriately
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('Error initializing app: $e'),
+        ),
+      ),
+    ));
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -77,8 +87,8 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-
   late final List<Widget> _screens;
+  final NotificationService _notificationService = NotificationService();
 
   @override
   void initState() {
@@ -90,6 +100,22 @@ class _MainScreenState extends State<MainScreen> {
       ReviewScreen(vocabService: widget.vocabService),
       SettingsScreen(settingsService: widget.settingsService),
     ];
+    _initializeNotifications();
+  }
+
+  Future<void> _initializeNotifications() async {
+    try {
+      await _notificationService.initialize();
+      await _notificationService.scheduleHourlyNotification(
+        startHour: widget.settingsService.startHour,
+        endHour: widget.settingsService.endHour,
+        minute: widget.settingsService.minute,
+      );
+      debugPrint('Notifications initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing notifications: $e');
+      // Continue app execution even if notifications fail
+    }
   }
 
   @override

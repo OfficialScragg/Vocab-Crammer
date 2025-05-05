@@ -10,6 +10,7 @@ import 'services/vocab_service.dart';
 import 'services/settings_service.dart';
 import 'services/notification_service.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/foundation.dart';
 
 // Helper function to get text style with appropriate font
 TextStyle getTextStyle(BuildContext context, String language, TextStyle? baseStyle) {
@@ -57,29 +58,51 @@ TextStyle getGreekTextStyle({
 }
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize services
-  final prefs = await SharedPreferences.getInstance();
-  final settingsService = SettingsService(prefs);
-  final vocabService = VocabService();
-  final notificationService = NotificationService();
-  
-  // Connect services
-  vocabService.setSettingsService(settingsService);
-  
-  // Initialize notifications
-  await notificationService.initialize();
-  await notificationService.scheduleHourlyNotification(
-    startHour: settingsService.startHour,
-    endHour: settingsService.endHour,
-    minute: settingsService.minute,
-  );
-  
-  runApp(MyApp(
-    settingsService: settingsService,
-    vocabService: vocabService,
-  ));
+  try {
+    // Ensure Flutter bindings are initialized first
+    WidgetsFlutterBinding.ensureInitialized();
+    
+    // Initialize SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    debugPrint('SharedPreferences initialized successfully');
+    
+    // Initialize services
+    final settingsService = SettingsService(prefs);
+    final vocabService = VocabService();
+    final notificationService = NotificationService();
+    
+    // Connect services
+    vocabService.setSettingsService(settingsService);
+    
+    // Initialize notifications with error handling
+    try {
+      await notificationService.initialize();
+      await notificationService.scheduleHourlyNotification(
+        startHour: settingsService.startHour,
+        endHour: settingsService.endHour,
+        minute: settingsService.minute,
+      );
+      debugPrint('Notifications initialized successfully');
+    } catch (e) {
+      debugPrint('Error initializing notifications: $e');
+      // Continue app execution even if notifications fail
+    }
+    
+    runApp(MyApp(
+      settingsService: settingsService,
+      vocabService: vocabService,
+    ));
+  } catch (e) {
+    debugPrint('Error during app initialization: $e');
+    // Show error UI
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Text('Error initializing app: $e'),
+        ),
+      ),
+    ));
+  }
 }
 
 class MyApp extends StatelessWidget {
