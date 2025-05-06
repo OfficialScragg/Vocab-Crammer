@@ -74,23 +74,26 @@ Future<void> main() async {
     // Connect services
     vocabService.setSettingsService(settingsService);
     
-    // Initialize notifications with error handling
+    // Initialize notification service with SharedPreferences
+    await notificationService.initialize(prefs);
+    
+    // Schedule initial notifications
     try {
-      await notificationService.initialize();
       await notificationService.scheduleHourlyNotification(
         startHour: settingsService.startHour,
         endHour: settingsService.endHour,
         minute: settingsService.minute,
       );
-      debugPrint('Notifications initialized successfully');
+      debugPrint('Notifications scheduled successfully');
     } catch (e) {
-      debugPrint('Error initializing notifications: $e');
+      debugPrint('Error scheduling initial notifications: $e');
       // Continue app execution even if notifications fail
     }
     
     runApp(MyApp(
       settingsService: settingsService,
       vocabService: vocabService,
+      notificationService: notificationService,
     ));
   } catch (e) {
     debugPrint('Error during app initialization: $e');
@@ -108,11 +111,13 @@ Future<void> main() async {
 class MyApp extends StatelessWidget {
   final SettingsService settingsService;
   final VocabService vocabService;
+  final NotificationService notificationService;
 
   const MyApp({
     Key? key,
     required this.settingsService,
     required this.vocabService,
+    required this.notificationService,
   }) : super(key: key);
 
   @override
@@ -127,6 +132,7 @@ class MyApp extends StatelessWidget {
       home: MainScreen(
         settingsService: settingsService,
         vocabService: vocabService,
+        notificationService: notificationService,
       ),
     );
   }
@@ -135,11 +141,13 @@ class MyApp extends StatelessWidget {
 class MainScreen extends StatefulWidget {
   final SettingsService settingsService;
   final VocabService vocabService;
+  final NotificationService notificationService;
 
   const MainScreen({
     Key? key,
     required this.settingsService,
     required this.vocabService,
+    required this.notificationService,
   }) : super(key: key);
 
   @override
@@ -197,6 +205,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       SettingsScreen(
         settingsService: widget.settingsService,
+        notificationService: widget.notificationService,
       ),
     ];
   }

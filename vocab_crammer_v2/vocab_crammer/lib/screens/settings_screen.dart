@@ -4,10 +4,12 @@ import '../services/notification_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final SettingsService settingsService;
+  final NotificationService notificationService;
 
   const SettingsScreen({
     Key? key,
     required this.settingsService,
+    required this.notificationService,
   }) : super(key: key);
 
   @override
@@ -18,7 +20,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   late int _minute;
-  final NotificationService _notificationService = NotificationService();
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -78,16 +80,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
-    await widget.settingsService.setStartHour(_startTime.hour);
-    await widget.settingsService.setEndHour(_endTime.hour);
-    await widget.settingsService.setMinute(_minute);
+    if (_isSaving) return;
     
-    // Update notifications with new schedule
-    await _notificationService.scheduleHourlyNotification(
-      startHour: _startTime.hour,
-      endHour: _endTime.hour,
-      minute: _minute,
-    );
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Save settings first
+      await widget.settingsService.setStartHour(_startTime.hour);
+      await widget.settingsService.setEndHour(_endTime.hour);
+      await widget.settingsService.setMinute(_minute);
+      
+      // Then update notifications
+      await widget.notificationService.scheduleHourlyNotification(
+        startHour: _startTime.hour,
+        endHour: _endTime.hour,
+        minute: _minute,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Settings saved successfully')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error saving settings: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving settings: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
   @override
@@ -96,41 +126,52 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Learning Session Times',
-              style: Theme.of(context).textTheme.titleLarge,
+      body: Stack(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Learning Session Times',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  title: const Text('Start Time'),
+                  subtitle: Text(_startTime.format(context)),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: _isSaving ? null : () => _selectTime(context, true),
+                ),
+                ListTile(
+                  title: const Text('End Time'),
+                  subtitle: Text(_endTime.format(context)),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: _isSaving ? null : () => _selectTime(context, false),
+                ),
+                ListTile(
+                  title: const Text('Minute of Hour'),
+                  subtitle: Text(_minute.toString().padLeft(2, '0')),
+                  trailing: const Icon(Icons.timer),
+                  onTap: _isSaving ? null : () => _selectMinute(context),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Learning sessions will occur every hour between ${_startTime.format(context)} and ${_endTime.format(context)}, at minute ${_minute.toString().padLeft(2, '0')}.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
-            ListTile(
-              title: const Text('Start Time'),
-              subtitle: Text(_startTime.format(context)),
-              trailing: const Icon(Icons.access_time),
-              onTap: () => _selectTime(context, true),
+          ),
+          if (_isSaving)
+            Container(
+              color: Colors.black.withOpacity(0.3),
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
             ),
-            ListTile(
-              title: const Text('End Time'),
-              subtitle: Text(_endTime.format(context)),
-              trailing: const Icon(Icons.access_time),
-              onTap: () => _selectTime(context, false),
-            ),
-            ListTile(
-              title: const Text('Minute of Hour'),
-              subtitle: Text(_minute.toString().padLeft(2, '0')),
-              trailing: const Icon(Icons.timer),
-              onTap: () => _selectMinute(context),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Learning sessions will occur every hour between ${_startTime.format(context)} and ${_endTime.format(context)}, at minute ${_minute.toString().padLeft(2, '0')}.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }

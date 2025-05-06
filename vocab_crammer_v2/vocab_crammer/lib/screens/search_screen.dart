@@ -124,8 +124,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   final word = _searchResults[index];
                   return Card(
                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: ListTile(
-                      title: Row(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           word.language == 'Hebrew'
@@ -138,7 +139,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 word.word,
                                 style: Theme.of(context).textTheme.titleMedium,
                               ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
                           Text(
                             word.translation,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(

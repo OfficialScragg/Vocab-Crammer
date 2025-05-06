@@ -3,6 +3,7 @@ import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -11,8 +12,9 @@ class NotificationService {
 
   bool _isInitialized = false;
   bool _isInitializing = false;
+  SharedPreferences? _prefs;
 
-  Future<void> initialize() async {
+  Future<void> initialize([SharedPreferences? prefs]) async {
     if (_isInitialized) {
       debugPrint('Notifications already initialized');
       return;
@@ -26,8 +28,14 @@ class NotificationService {
     _isInitializing = true;
 
     try {
+      // Initialize SharedPreferences
+      _prefs = prefs ?? await SharedPreferences.getInstance();
+      debugPrint('SharedPreferences initialized successfully');
+
       // Initialize timezone data
       tz.initializeTimeZones();
+      tz.setLocalLocation(tz.getLocation('UTC'));
+      debugPrint('Timezone initialized to UTC');
 
       // Request permissions first
       final isAllowed = await AwesomeNotifications().isNotificationAllowed();
@@ -42,7 +50,7 @@ class NotificationService {
 
       // Initialize notifications
       await AwesomeNotifications().initialize(
-        null, // no icon for now, it will use the default app icon
+        'resource://drawable/cram_icon',
         [
           NotificationChannel(
             channelKey: 'vocab_crammer_channel',
@@ -54,9 +62,12 @@ class NotificationService {
             channelShowBadge: true,
             enableVibration: true,
             enableLights: true,
+            playSound: true,
+            criticalAlerts: true,
+            icon: 'resource://drawable/cram_icon',
           )
         ],
-        debug: true, // Enable debug mode to see more detailed logs
+        debug: true,
       );
 
       // Listen to notification events
@@ -78,25 +89,21 @@ class NotificationService {
     }
   }
 
-  // Handle notification actions
   @pragma('vm:entry-point')
   static Future<void> _onActionReceivedMethod(ReceivedAction receivedAction) async {
     debugPrint('Notification action received: ${receivedAction.toMap()}');
   }
 
-  // Handle notification creation
   @pragma('vm:entry-point')
   static Future<void> _onNotificationCreatedMethod(ReceivedNotification receivedNotification) async {
     debugPrint('Notification created: ${receivedNotification.toMap()}');
   }
 
-  // Handle notification display
   @pragma('vm:entry-point')
   static Future<void> _onNotificationDisplayedMethod(ReceivedNotification receivedNotification) async {
     debugPrint('Notification displayed: ${receivedNotification.toMap()}');
   }
 
-  // Handle notification dismissal
   @pragma('vm:entry-point')
   static Future<void> _onDismissActionReceivedMethod(ReceivedAction receivedAction) async {
     debugPrint('Notification dismissed: ${receivedAction.toMap()}');
@@ -121,53 +128,59 @@ class NotificationService {
       // Cancel any existing notifications
       await AwesomeNotifications().cancelAllSchedules();
 
-      // Calculate the next scheduled time
+      // Get current time
       final now = DateTime.now();
-      var scheduledTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        startHour,
-        minute,
-      );
-
-      // If the time has already passed today, start from tomorrow
-      if (scheduledTime.isBefore(now)) {
-        scheduledTime = scheduledTime.add(const Duration(days: 1));
-      }
-
+      
       // Schedule notifications for each hour in the range
       for (var hour = startHour; hour <= endHour; hour++) {
-        final notificationTime = DateTime(
-          scheduledTime.year,
-          scheduledTime.month,
-          scheduledTime.day,
+        // Create the scheduled time
+        var scheduledTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
           hour,
           minute,
         );
 
-        await AwesomeNotifications().createNotification(
-          content: NotificationContent(
-            id: hour, // Use hour as the notification ID to ensure uniqueness
-            channelKey: 'vocab_crammer_channel',
-            title: 'Time to Learn!',
-            body: 'Take a few minutes to learn some new vocabulary words.',
-            notificationLayout: NotificationLayout.Default,
-            category: NotificationCategory.Reminder,
-            wakeUpScreen: true,
-            fullScreenIntent: true,
-            criticalAlert: true,
-          ),
-          schedule: NotificationCalendar(
-            hour: hour,
-            minute: minute,
-            second: 0,
-            millisecond: 0,
-            repeats: true,
-            preciseAlarm: true,
-          ),
+        // If the time has already passed today, schedule for tomorrow
+        if (scheduledTime.isBefore(now)) {
+          scheduledTime = scheduledTime.add(const Duration(days: 1));
+        }
+
+        // Create notification content
+        final content = NotificationContent(
+          id: hour,
+          channelKey: 'vocab_crammer_channel',
+          title: 'Time to Learn!',
+          body: 'Take a few minutes to learn some new vocabulary words.',
+          notificationLayout: NotificationLayout.Default,
+          category: NotificationCategory.Reminder,
+          wakeUpScreen: true,
+          fullScreenIntent: true,
+          criticalAlert: true,
+          autoDismissible: false,
         );
+
+        // Create notification schedule
+        final schedule = NotificationCalendar(
+          hour: hour,
+          minute: minute,
+          second: 0,
+          millisecond: 0,
+          repeats: true,
+          preciseAlarm: true,
+          allowWhileIdle: true,
+        );
+
+        // Create the notification
+        await AwesomeNotifications().createNotification(
+          content: content,
+          schedule: schedule,
+        );
+        
+        debugPrint('Scheduled notification for ${scheduledTime.toString()}');
       }
+      
       debugPrint('Successfully scheduled notifications from $startHour:00 to $endHour:00');
     } catch (e) {
       debugPrint('Error scheduling notifications: $e');
